@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Position-Aware CTR Opportunity Scoring for Search Content Review</title>
+<meta name="description" content="A public-safe research artifact from the FlyRank ML Internship on ranking search-content review candidates using position-aware CTR opportunity signals.">
+<style>
+:root{--ink:#172033;--muted:#5b667a;--line:#e5e9f0;--accent:#2563eb;--accent2:#0f766e;--soft:#f5f8fc;--warn:#fff7ed}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:#fff;line-height:1.65}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}.wrap{max-width:1040px;margin:auto;padding:0 24px}
+.hero{padding:78px 0 64px;background:linear-gradient(180deg,#f5f8ff 0%,#fff 100%);border-bottom:1px solid var(--line)}
+.kicker{font-size:13px;text-transform:uppercase;letter-spacing:.14em;font-weight:800;color:var(--accent)}
+h1{font-size:clamp(38px,6vw,66px);line-height:1.03;letter-spacing:-.045em;max-width:900px;margin:16px 0 22px}
+.deck{font-size:20px;color:var(--muted);max-width:820px}
+.meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.pill{padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:13px;font-weight:700}
+nav{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;gap:18px;overflow:auto;white-space:nowrap;padding-top:12px;padding-bottom:12px}nav a{font-size:13px;font-weight:700;color:var(--muted)}
+main{padding:42px 0 80px}section{padding:30px 0;border-bottom:1px solid var(--line)}section:last-child{border-bottom:0}
+h2{font-size:31px;letter-spacing:-.02em;margin:0 0 18px}h3{font-size:20px;margin:25px 0 8px}
+p{max-width:820px}.abstract{font-size:18px;line-height:1.75}.callout{padding:22px 24px;border:1px solid #dbe5ff;background:#f7f9ff;border-radius:16px;margin:22px 0}.warning{background:var(--warn);border-color:#fed7aa}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0}.card{padding:20px;border:1px solid var(--line);border-radius:16px;background:#fff}.num{font-size:34px;font-weight:850;letter-spacing:-.04em}.label{font-size:13px;color:var(--muted);font-weight:700}
+table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line)}th{background:var(--soft)}
+figure{margin:26px 0;padding:18px;border:1px solid var(--line);border-radius:16px;background:#fff}figure img{width:100%;height:auto;display:block}figcaption{color:var(--muted);font-size:14px;margin-top:10px}
+ol li,ul li{margin:8px 0}.small{font-size:14px;color:var(--muted)}
+footer{padding:34px 0;background:#0f172a;color:#dbe4f0}.footerlink{color:#93c5fd}
+@media(max-width:760px){.grid{grid-template-columns:1fr}h2{font-size:27px}.hero{padding-top:54px}.deck{font-size:18px}}
+</style>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+<div class="kicker">FlyRank ML Internship · Research artifact</div>
+<h1>Position-Aware CTR Opportunity Scoring for Search Content Review</h1>
+<p class="deck">Can a learned ranking model prioritize search-visible content items for human review better than a transparent position-aware rule, without leaking the outcome into the features?</p>
+<div class="meta"><span class="pill">Fraz Rasool</span><span class="pill">CTR / Engagement Opportunity Scoring</span><span class="pill">March 2026 analysis window</span><span class="pill">Public-safe</span></div>
+</div></header>
+<nav><div class="wrap">
+<a href="#abstract">Abstract</a><a href="#problem">Problem</a><a href="#data">Data</a><a href="#method">Methodology</a><a href="#results">Results</a><a href="#limits">Limitations</a><a href="#recommendations">Recommendations</a><a href="#repro">Reproducibility</a><a href="#credit">Credit</a>
+</div></nav>
+<main><div class="wrap">
+
+<section id="abstract"><h2>Abstract</h2>
+<p class="abstract">This study asks whether a machine-learning score can improve the ordering of search-visible content items for a limited human review queue compared with a transparent position-aware CTR rule. I use the public-safe FlyRank pseudonymized warehouse release, aggregate March 2026 search-performance observations to a client-by-content decision grain, and define a same-window bottom-decile CTR-gap proxy as the development label. Logistic regression and random forest are evaluated using structural features only and a grouped client holdout, with precision@K as the primary decision metric and ROC-AUC as a secondary diagnostic. On the held-out clients, logistic regression reaches 0.48 precision@50 and 0.52 precision@100 versus 0.16 and 0.20 for the rule baseline, while the random forest is similar at 0.46 and 0.55; the baseline nevertheless has higher ROC-AUC (0.885), showing that overall discrimination and top-of-queue usefulness are not the same objective. The result supports a human-in-the-loop review queue and evidence-based prioritization, not a claim that a page is defective, that an edit will recover clicks, or that Google's ranking system can be predicted.</p>
+</section>
+
+<section id="problem"><h2>1. Introduction / Problem statement</h2>
+<p>Search teams have more potentially reviewable pages than they can inspect in a single cycle. A useful system therefore does not need to label every page perfectly; it needs to put the most decision-relevant candidates near the top of a finite queue.</p>
+<p>The research question is: <strong>among pages with enough search exposure to matter, which items appear to under-capture clicks relative to their search-position context, and can a learned ranking improve the top of that review queue?</strong></p>
+<div class="callout"><strong>Decision supported.</strong> A reviewer decides which pages to inspect first. The score is a prioritization device, not a diagnosis and not a forecast of recovered clicks.</div>
+</section>
+
+<section id="data"><h2>2. Data</h2>
+<div class="grid">
+<div class="card"><div class="num">78.84M</div><div class="label">daily fact rows in the release</div></div>
+<div class="card"><div class="num">9.84M</div><div class="label">March 2026 fact rows inspected for this lane</div></div>
+<div class="card"><div class="num">91,974</div><div class="label">visible client-content rows after aggregation/filtering</div></div>
+</div>
+<p>The warehouse release is <code>flyrank_pseudonymized_warehouse_release_v20260703</code>, exported 2026-07-03. Its daily performance facts run through 2026-06-30 after a deliberate three-day freshness cutoff. The release contains <code>dim_clients</code>, <code>dim_content</code>, <code>fact_content_daily_performance</code>, and <code>fact_content_query_90d</code>; this lane primarily uses the daily performance fact and joins content metadata from <code>dim_content</code>.</p>
+<p>For the final model comparison, the March 1–31, 2026 daily fact rows are filtered to records with GSC data available, aggregated by client and content item, and restricted to at least 150 impressions with a valid average position. This produces 91,974 visible client-content observations, with 85,429 in training and 6,545 in the grouped test split.</p>
+<p>Identifiers are used only for joins and grouping and are excluded from model features. Raw client names, domains, URLs, titles, keywords, and private queries are not present in the released data and are not reproduced here. Future-window fields and product decision flags are also excluded from the model.</p>
+</section>
+
+<section id="method"><h2>3. Methodology</h2>
+<h3>Assumptions</h3>
+<ul>
+<li>CTR should be interpreted in search-position context; comparing raw CTR across all positions would confound visibility with engagement.</li>
+<li>A fixed review queue makes top-K precision more decision-relevant than a single global accuracy number.</li>
+<li>The development label is a <strong>proxy</strong> for observed under-capture, not a causal outcome.</li>
+</ul>
+<h3>Features</h3>
+<p>The final feature set uses <code>position_tier</code>, <code>word_count</code>, <code>content_type</code>, <code>main_intent</code>, <code>search_volume</code>, and <code>impressions</code>. The model deliberately excludes <code>ctr</code> and <code>ctr_gap</code>, because using them would let the model read the answer directly.</p>
+<h3>Label definition</h3>
+<p>For the final Weeks 5–7 model, <code>ctr_gap</code> is a page's observed March CTR minus the median CTR of its March position tier. The positive class is the worst 10% of that gap distribution. This is a current-window screening proxy; it is not an observed post-intervention outcome.</p>
+<h3>Baseline</h3>
+<p>The baseline is the Week-4 transparent rule: prioritize negative position-tier CTR gaps while weighting the gap by impressions. It is intentionally simple and auditable. The same test observations and the same precision@K metric are used when comparing it with the models.</p>
+<h3>Validation design</h3>
+<p>A <code>GroupShuffleSplit</code> with <code>random_state=42</code> and 25% test size holds entire clients out of training. The final split has zero client overlap: 31 training clients and 11 test clients. This avoids the optimistic result produced by a naive row-level split, where the same clients appear on both sides.</p>
+<h3>Leakage checks</h3>
+<p>A deliberate leakage attack that adds <code>ctr_gap</code> to the feature set drives AUC to 1.0, demonstrating why it must be excluded. The final feature set contains no label-derived feature, no future-window feature, and no product flag. The validation audit therefore treats the grouped split as the honest evaluation.</p>
+</section>
+
+<section id="results"><h2>4. Results</h2>
+<p>The main result is about <strong>queue quality</strong>. The learned models put substantially more true proxy-priority items into the first 50–100 positions than the hand-written rule, even though the rule has stronger ROC-AUC over the full score range.</p>
+<table><thead><tr><th>Method</th><th>Precision@50</th><th>Precision@100</th><th>ROC-AUC</th></tr></thead>
+<tbody>
+<tr><td>Rule baseline</td><td>0.160</td><td>0.200</td><td>0.885</td></tr>
+<tr><td><strong>Logistic regression</strong></td><td><strong>0.480</strong></td><td><strong>0.520</strong></td><td>0.799</td></tr>
+<tr><td>Random forest</td><td>0.460</td><td>0.550</td><td>0.790</td></tr>
+<tr><td>Random / base-rate reference</td><td>0.188</td><td>0.188</td><td>0.500</td></tr>
+</tbody></table>
+<figure><img src="assets/precision.svg" alt="Precision at 50 comparison"><figcaption>Figure 1. At the top of the review queue, both learned models outperform the rule baseline. The random reference is the test-set positive rate.</figcaption></figure>
+<figure><img src="assets/precision100.svg" alt="Precision at 100 comparison"><figcaption>Figure 2. At K=100, the random forest is slightly ahead of logistic regression, but the two learned models remain close.</figcaption></figure>
+<figure><img src="assets/auc.svg" alt="ROC AUC comparison"><figcaption>Figure 3. ROC-AUC tells a different story: the rule ranks the full score range more strongly, while its top-of-queue ordering is weaker.</figcaption></figure>
+<p>Because logistic regression and random forest are close across the decision metrics, the simpler logistic model is the preferred model to carry forward: it avoids unnecessary complexity and remains easier to inspect.</p>
+</section>
+
+<section id="limits"><h2>5. Limitations & honest framing</h2>
+<ul>
+<li><strong>Proxy label:</strong> the final supervised label is derived from the same March observation window. It should not be presented as a future recovery or intervention outcome.</li>
+<li><strong>Cross-sectional evidence:</strong> the analysis measures associations in one monthly slice. It cannot establish that a title, meta change, or content edit causes higher CTR.</li>
+<li><strong>Coverage:</strong> the review queue requires sufficient GSC exposure and therefore does not represent new/unpublished pages or clients without usable GSC data in the window.</li>
+<li><strong>Known model weakness:</strong> error analysis shows some very-high-impression, large-gap pages receive low model probabilities. Those cases should remain a monitored soft spot.</li>
+<li><strong>Public safety:</strong> the published artifact contains aggregate methodology and results only; it does not expose client identities, domains, URLs, titles, queries, or row-level examples.</li>
+</ul>
+<div class="callout warning"><strong>Claim boundary:</strong> this work supports “observed,” “measured,” “directional,” and “decision-support” language. It does not support “guaranteed improvement,” “causal effect,” or “prediction of Google's ranking algorithm.”</div>
+</section>
+
+<section id="recommendations"><h2>6. Ranked recommendations</h2>
+<ol>
+<li><strong>Use the learned score to order a human review queue.</strong> The validated top-K result is strongest where review capacity is limited; logistic regression is the preferred simple model.</li>
+<li><strong>Review high-reach underperformers first, but verify measurement.</strong> High exposure makes a prioritization more decision-relevant, yet unusually low CTR at strong positions can also indicate tracking or attribution problems.</li>
+<li><strong>Apply a per-client concentration cap.</strong> The Week-7 top queue was highly concentrated; cap a weekly batch at roughly 10% from any one client so the queue remains portfolio-aware.</li>
+<li><strong>Check missing fields before acting.</strong> Missing word count or search-volume fields should trigger manual review rather than automatic interpretation.</li>
+<li><strong>Keep content changes human-approved.</strong> Do not auto-publish title/meta rewrites, and do not act on the provisional stale-content label until its point-in-time freshness data is trustworthy.</li>
+<li><strong>Revalidate monthly.</strong> Treat precision@50 below about 0.30 as a stop-and-investigate signal, and re-run grouped-client validation before carrying the queue forward.</li>
+</ol>
+</section>
+
+<section id="repro"><h2>7. Reproducibility</h2>
+<p>This artifact is designed so a reviewer can trace the research from question to validation to action playbook.</p>
+<ul>
+<li><a href="https://github.com/Fraz-Rasool/ML-Internship">Repository</a> — complete internship workspace.</li>
+<li><a href="https://github.com/Fraz-Rasool/ML-Internship/tree/main/work/notebooks">Notebook directory</a> — Weeks 1–7 plus the capstone.</li>
+<li><a href="https://github.com/Fraz-Rasool/ML-Internship/blob/main/work/notebooks/w05_model.ipynb">Week 5 model</a> — model/baseline comparison and error analysis.</li>
+<li><a href="https://github.com/Fraz-Rasool/ML-Internship/blob/main/work/notebooks/w06_validation_audit.ipynb">Week 6 validation audit</a> — grouped split and leakage attack.</li>
+<li><a href="https://github.com/Fraz-Rasool/ML-Internship/blob/main/work/notebooks/w07_action_playbook.ipynb">Week 7 action playbook</a> — ranked actions, human review rules, and monitoring.</li>
+<li><a href="https://github.com/Fraz-Rasool/ML-Internship/blob/main/work/notebooks/capstone.ipynb">Capstone notebook</a> — paper-aligned summary.</li>
+</ul>
+<p class="small">The final model comparison uses deterministic seeds (<code>random_state=42</code>). The gated warehouse is accessed during notebook execution; the public page does not embed or redistribute the private/gated data.</p>
+</section>
+
+<section id="credit"><h2>8. Acknowledgments & data credit</h2>
+<p><strong>Built on the FlyRank ML Internship dataset.</strong> The research uses the pseudonymized warehouse release supplied for the internship and follows its public-safety constraints.</p>
+<p><a href="https://flyrank.ai">FlyRank</a> — data source and internship context.</p>
+<p class="small">This artifact is an internship research exercise and should be read as a decision-support analysis rather than a production claim about search ranking behavior.</p>
+</section>
+
+</div></main>
+<footer><div class="wrap">Fraz Rasool · FlyRank ML Internship · Research artifact</div></footer>
+</body></html>
